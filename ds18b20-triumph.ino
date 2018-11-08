@@ -53,6 +53,7 @@ void setup() {
   // initialize the DS18B20 temperature sensor
   sensors.begin();
   sensors.getAddress(sensorDeviceAddress, 0);
+  // Set the sensor resolution to 9 bits for faster reads ( 94ms per conversion) 
   sensors.setResolution(sensorDeviceAddress, 9);
 
   // Enable I2C communication
