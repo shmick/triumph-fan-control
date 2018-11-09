@@ -25,8 +25,8 @@ float tempHigh = 100; // Turn the fan on at or above this temp
 float tempLow = 95;   // Turn the fan off at or below this temp
 bool  fanState;
 
-// This will be the gate pin on our BS170 MOSFET
-#define RelayPin 4 // Arduino D4 = ESP8266 Pin D2
+// This will be the gate pin for the MOSFET
+#define RelayPin 4  // Arduino D4 = ESP8266 Pin D2
 
 // OLED Display setup
 #define OLED_SDA 14 // Arduino 14 = ESP8266 Pin D5
@@ -50,11 +50,28 @@ float average = 0;             // the average
 
 // Keep track of timing
 uint32_t now = 0;                // All timers reference the now variable
-const int LoopInterval = 100;    // Loop Interval in milliseconds
-uint32_t currentMillis;
-uint32_t previousMillis = now;
+
+// Loop timer
+uint32_t prevLoopMillis;
+uint32_t numLoops = 0;
+uint32_t currLoops = 0;
+
+// Serial timer
+const int serialInterval = 500;
+uint32_t prevSerialMillis = now;
+
+// Avg timer
+const int avgInterval = 100;
+uint32_t prevAvgMillis = now;
+
+// OLED timer
+const int OLEDInterval = 250;
+uint32_t prevOLEDMillis = now;
+
 
 void setup() {
+  Serial.begin(115200); //Start a serial session
+
   pinMode(RelayPin, OUTPUT);    // Set the
   digitalWrite(RelayPin, LOW);
 
@@ -92,23 +109,27 @@ float readSensor()
 
 void avgTemps()
 {
-  // subtract the last reading:
-  total = total - readings[readIndex];
-  // Read the temps from the thermocouple
-  readings[readIndex] = readSensor();
-  //readings[readIndex] = analogRead(ThermocouplePin);
-  // add the reading to the total:
-  total = total + readings[readIndex];
-  // advance to the next position in the array:
-  readIndex = readIndex + 1;
-  // if we're at the end of the array...
-  if (readIndex >= numReadings)
+  if (now - prevAvgMillis > avgInterval)
   {
-    // ...wrap around to the beginning:
-    readIndex = 0;
-  }
+    prevAvgMillis = now;
 
-  tempAvg = total / numReadings;
+    // subtract the last reading:
+    total = total - readings[readIndex];
+    // Read the temps from the thermocouple
+    readings[readIndex] = readSensor();
+    // add the reading to the total:
+    total = total + readings[readIndex];
+    // advance to the next position in the array:
+    readIndex = readIndex + 1;
+    // if we're at the end of the array...
+    if (readIndex >= numReadings)
+    {
+      // ...wrap around to the beginning:
+      readIndex = 0;
+    }
+
+    tempAvg = total / numReadings;
+  }
 }
 
 
@@ -129,59 +150,77 @@ void controlRelay(void)
 
 void displaySerial()
 {
-  Serial.print("Temp: ");
-  Serial.println(tempC);
-  Serial.print("Temp Avg: ");
-  Serial.println(tempAvg);
-  Serial.print("Fan State: ");
-  Serial.println(fanState);
+  if (now - prevSerialMillis > serialInterval)
+  {
+    prevSerialMillis = now;
+
+    Serial.print("Raw: ");
+    Serial.print(tempC);
+    Serial.print(", Avg: ");
+    Serial.print(tempAvg);
+    Serial.print(", Fan State: ");
+    Serial.print(fanState);
+    Serial.print(", Loops: ");
+    Serial.print(currLoops);
+    Serial.print("\n");
+  }
+
 }
 
 
 void displayOLED()
 {
-  // have to wipe the buffer before writing anything new
-  display.clearDisplay();
+  if (now - prevOLEDMillis > OLEDInterval)
+  {
+    prevOLEDMillis = now;
 
-  // TOP HALF = Avg + Average Temp
-  display.setFont(&FreeSans9pt7b);
-  display.setCursor(0, 22);
-  display.print("Avg");
+    // have to wipe the buffer before writing anything new
+    display.clearDisplay();
 
-  display.setFont(&FreeSerifBold18pt7b);
-  display.setCursor(48, 26);
-  if ( tempAvg >= 100 )
-    display.print(tempAvg, 1);
-  else
-    display.print(tempAvg);
+    // TOP HALF = Avg + Average Temp
+    display.setFont(&FreeSans9pt7b);
+    display.setCursor(0, 22);
+    display.print("Avg");
 
-  // BOTTOM HALF = Raw + tempC
-  display.setFont(&FreeSans9pt7b);
-  display.setCursor(0, 56);
-  display.print("Raw");
+    display.setFont(&FreeSerifBold18pt7b);
+    display.setCursor(44, 26);
+    if ( tempAvg >= 100 )
+      display.print(tempAvg, 1);
+    else
+      display.print(tempAvg, 0);
 
-  display.setFont(&FreeSerifBold18pt7b);
-  display.setCursor(60, 60);
-  if ( tempC >= 100 )
-    display.print(tempC, 1);
-  else
-    display.print(tempC);
+    // BOTTOM HALF = Raw + tempC
+    display.setFont(&FreeSans9pt7b);
+    display.setCursor(0, 56);
+    display.print("Raw");
 
-  display.display();
+    display.setFont(&FreeSerifBold18pt7b);
+    display.setCursor(44, 60);
+    if ( tempC >= 100 )
+      display.print(tempC, 1);
+    else
+      display.print(tempC, 0);
+
+    display.display();
+  }
+}
+
+
+void trackloop() {
+  if ( now - prevLoopMillis >= 1000) {
+    currLoops = numLoops;
+    numLoops = 0;
+    prevLoopMillis = now;
+  }
+  numLoops++;
 }
 
 
 void loop() {
-  // No need to run this more than every 100ms
   now = millis();
-  currentMillis = now;
-  // Only run the main loop every LoopInterval milliseconds
-  if (currentMillis - previousMillis > LoopInterval) {
-    readSensor();
-    avgTemps();
-    controlRelay();
-    displaySerial();
-    displayOLED();
-    previousMillis = currentMillis;
-  }
+  trackloop();
+  avgTemps();
+  controlRelay();
+  displaySerial();
+  displayOLED();
 }
