@@ -11,16 +11,19 @@
 #include <Fonts/FreeSerifBold18pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
 
-#define ONE_WIRE_BUS 15 // Arduino 15 = ESP8266 D8
+#define ONE_WIRE_BUS 15      // Arduino 15 = ESP8266 D8
+#define SENSOR_RESOLUTION 9  // 9 bits = 94ms max conversion time
+#define SENSOR_INDEX 0
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress sensorDeviceAddress;
 
 // Temperature variables
-float TempC;          //
-float TempHigh = 100; // Turn the fan on at or above this temp
-float TempLow = 95;   // Turn the fan off at or below this temp
-bool FanState;
+float tempC;          //
+float tempAvg;        //
+float tempHigh = 100; // Turn the fan on at or above this temp
+float tempLow = 95;   // Turn the fan off at or below this temp
+bool  fanState;
 
 // This will be the gate pin on our BS170 MOSFET
 #define RelayPin 4 // Arduino D4 = ESP8266 Pin D2
@@ -38,56 +41,88 @@ Adafruit_SSD1306 display(OLED_RESET);
 // Step 2: add a comment to this line: #define SSD1306_128_32
 #endif
 
+// Define the info needed for the temperature averaging
+const int numReadings = 8;     // the number of readings to average
+float readings[numReadings];   // the readings from the sensor
+int readIndex = 0;             // the index of the current reading
+float total = 0;               // the running total
+float average = 0;             // the average
 
 // Keep track of timing
-uint32_t now = 0; //This variable is used to keep track of time
-const int LoopInterval = 100;
+uint32_t now = 0;                // All timers reference the now variable
+const int LoopInterval = 100;    // Loop Interval in milliseconds
 uint32_t currentMillis;
 uint32_t previousMillis = now;
 
 void setup() {
-  // Set the Relay to output mode and ensure the relay is off
-  pinMode(RelayPin, OUTPUT);
+  pinMode(RelayPin, OUTPUT);    // Set the
   digitalWrite(RelayPin, LOW);
 
   // initialize the DS18B20 temperature sensor
   sensors.begin();
   sensors.getAddress(sensorDeviceAddress, 0);
-  // Set the sensor resolution to 9 bits for faster reads ( 94ms per conversion) 
-  sensors.setResolution(sensorDeviceAddress, 9);
+  sensors.setResolution(sensorDeviceAddress, SENSOR_RESOLUTION);
+
+  // initialize all the readings to 0:
+  for (int thisReading = 0; thisReading < numReadings; thisReading++)
+  {
+    readings[thisReading] = 0;
+  }
 
   // Enable I2C communication
-  Wire.setClock(400000L); // ESP8266 Only
-  Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(400000L);          // ESP8266 Only
+  Wire.begin(OLED_SDA, OLED_SCL);  // ESP8266 Only
 
   // Setup the OLED display
-  display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C);  // initialize with the I2C addr 0x3C (for the 128x32)
+  display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C);  // initialize with the I2C addr
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setTextSize(1);
   display.display();
+} // End setup()
 
+
+float readSensor()
+{
+  sensors.requestTemperatures();
+  tempC = sensors.getTempCByIndex(0);
+  return tempC;
 }
 
 
-void getTemps(void)
+void avgTemps()
 {
-  sensors.requestTemperatures();
-  TempC = sensors.getTempCByIndex(0);
+  // subtract the last reading:
+  total = total - readings[readIndex];
+  // Read the temps from the thermocouple
+  readings[readIndex] = readSensor();
+  //readings[readIndex] = analogRead(ThermocouplePin);
+  // add the reading to the total:
+  total = total + readings[readIndex];
+  // advance to the next position in the array:
+  readIndex = readIndex + 1;
+  // if we're at the end of the array...
+  if (readIndex >= numReadings)
+  {
+    // ...wrap around to the beginning:
+    readIndex = 0;
+  }
+
+  tempAvg = total / numReadings;
 }
 
 
 void controlRelay(void)
 {
-  if ( TempC >= TempHigh )
+  if ( tempAvg >= tempHigh )
   {
     digitalWrite(RelayPin, HIGH);
-    FanState = 1;
+    fanState = 1;
   }
-  else if ( TempC <= TempLow )
+  else if ( tempAvg <= tempLow )
   {
     digitalWrite(RelayPin, LOW);
-    FanState = 0;
+    fanState = 0;
   }
 }
 
@@ -95,15 +130,44 @@ void controlRelay(void)
 void displaySerial()
 {
   Serial.print("Temp: ");
-  Serial.println(TempC);
+  Serial.println(tempC);
+  Serial.print("Temp Avg: ");
+  Serial.println(tempAvg);
   Serial.print("Fan State: ");
-  Serial.println(FanState);
+  Serial.println(fanState);
 }
 
 
 void displayOLED()
 {
-  // put something on the OLED
+  // have to wipe the buffer before writing anything new
+  display.clearDisplay();
+
+  // TOP HALF = Avg + Average Temp
+  display.setFont(&FreeSans9pt7b);
+  display.setCursor(0, 22);
+  display.print("Avg");
+
+  display.setFont(&FreeSerifBold18pt7b);
+  display.setCursor(48, 26);
+  if ( tempAvg >= 100 )
+    display.print(tempAvg, 1);
+  else
+    display.print(tempAvg);
+
+  // BOTTOM HALF = Raw + tempC
+  display.setFont(&FreeSans9pt7b);
+  display.setCursor(0, 56);
+  display.print("Raw");
+
+  display.setFont(&FreeSerifBold18pt7b);
+  display.setCursor(60, 60);
+  if ( tempC >= 100 )
+    display.print(tempC, 1);
+  else
+    display.print(tempC);
+
+  display.display();
 }
 
 
@@ -111,11 +175,13 @@ void loop() {
   // No need to run this more than every 100ms
   now = millis();
   currentMillis = now;
+  // Only run the main loop every LoopInterval milliseconds
   if (currentMillis - previousMillis > LoopInterval) {
-    getTemps();
+    readSensor();
+    avgTemps();
     controlRelay();
     displaySerial();
-    //    displayOLED();
+    displayOLED();
     previousMillis = currentMillis;
   }
 }
