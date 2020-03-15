@@ -1,4 +1,4 @@
-# triumph fan control sketch
+# Triumph Fan Controller
 
 ## Parts
 * [Wemos D1 Mini Micro Controller](https://docs.wemos.cc/en/latest/d1/d1_mini.html)
