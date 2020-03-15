@@ -4,7 +4,7 @@ An external radiator fan controller for a Triumph Thunderbird Motorcycle with ad
 
 ## Parts
 * [Wemos D1 Mini Micro Controller](https://docs.wemos.cc/en/latest/d1/d1_mini.html)
-* [DS18B20 Digital temperature sensor](https://www.adafruit.com/product/381)
+* [DS18B20 Digital temperature sensor](https://www.ebay.ca/itm/DS18B20-Digital-Temperature-Sensor-Kable-1m-55-to-125-Celsius-1-Wire-interface/263772599599)
 * [BS170 MOSFET](https://www.mouser.ca/ProductDetail/ON-Semiconductor-Fairchild/BS170?qs=FOlmdCx%252BAA0Q%252B3zvwxJUKQ%3D%3D)
 * [Omron 12V Relay](https://www.mouser.ca/ProductDetail/Omron-Electronics/G2RL-1-E-CF-DC12?qs=CX134%252BdLMDHzpBkhYmxxxQ%3D%3D)
 * [6 Pin Waterproof connector](https://www.amazon.ca/uxcell%C2%AE-Female-Waterproof-Connector-Strips/dp/B00X77LQ3I)
