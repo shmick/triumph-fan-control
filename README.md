@@ -1,5 +1,8 @@
 # Triumph Fan Controller
 
+An external radiator fan controller for a Triumph Thunderbird Motorcycle with adjustable Fan On / Fan Off temperatures.
+
+An external controller for the radiator fan on a Triumph 
 ## Parts
 * [Wemos D1 Mini Micro Controller](https://docs.wemos.cc/en/latest/d1/d1_mini.html)
 * [DS18B20 Digital temperature sensor](https://www.adafruit.com/product/381)
